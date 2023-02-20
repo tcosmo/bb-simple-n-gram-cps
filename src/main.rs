@@ -27,6 +27,9 @@ struct Args {
 
     #[clap(long, default_value_t = 4)]
     radius: u8,
+
+    #[clap(long, default_value_t = 1_000_000)]
+    max_context_count: usize,
 }
 
 fn main() -> Result<(), i32> {
@@ -89,7 +92,7 @@ fn main() -> Result<(), i32> {
             );
 
             count_processed += 1;
-            match classify_fn(&machine, args.radius) {
+            match classify_fn(&machine, args.radius, args.max_context_count) {
                 Ok(LoopsForever) => {
                     count_loops += 1;
                     let count = output_file_looping
@@ -123,7 +126,11 @@ fn main() -> Result<(), i32> {
         let elapsed = start_time.elapsed();
         println!("Elapsed: {:.2?}", elapsed);
     } else {
-        match classify_fn(&Program::from_string(&args.machine), args.radius) {
+        match classify_fn(
+            &Program::from_string(&args.machine),
+            args.radius,
+            args.max_context_count,
+        ) {
             Ok(LoopsForever) => {
                 println!("{} loops forever", args.machine);
             }

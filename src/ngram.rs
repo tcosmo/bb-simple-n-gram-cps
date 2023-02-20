@@ -101,32 +101,7 @@ impl<T> std::ops::IndexMut<Dir> for DirMap<T> {
 struct PartialReachable {
     radius: Radius, // must lie in [1, 31]
     reachable_local_contexts: BTreeSet<LocalContext>,
-    reachable_ngrams: DirMap<NGramSet>,
-}
-
-#[derive(Clone)]
-struct NGramSet {
-    seen: BTreeSet<NGram>, // [u64; NGRAM_SET_CONTAINER],
-}
-impl NGramSet {
-    fn new() -> Self {
-        NGramSet {
-            seen: BTreeSet::new(), // [0; NGRAM_SET_CONTAINER],
-        }
-    }
-    fn insert(&mut self, g: NGram) {
-        self.seen.insert(g);
-        /*
-        let i = g.0 / 64;
-        self.seen[i as usize] |= 1 << (g.0 % 64);
-        */
-    }
-    fn contains(&self, g: &NGram) -> bool {
-        /*let i = g.0 / 64;
-        (self.seen[i as usize] & (1 << (g.0 % 64))) != 0
-        */
-        self.seen.contains(g)
-    }
+    reachable_ngrams: DirMap<BTreeSet<NGram>>,
 }
 
 impl PartialReachable {
@@ -143,7 +118,7 @@ impl PartialReachable {
             .into_iter()
             .collect(),
             reachable_ngrams: DirMap::new({
-                let mut res = NGramSet::new();
+                let mut res = BTreeSet::new();
                 res.insert(NGram(0));
                 res
             }),
@@ -202,7 +177,7 @@ impl PartialReachable {
     /**
      * Adds more, to quickly saturate, does not check for saturation.
      */
-    fn add_to_saturate_quick(&mut self, program: &Program) {
+    fn add_to_saturate_quick(&mut self, program: &Program, max_context_count: usize) {
         let mut work_queue_local: Vec<LocalContext> =
             self.reachable_local_contexts.iter().cloned().collect();
 
@@ -210,6 +185,11 @@ impl PartialReachable {
             DirMap::new(BTreeMap::new());
 
         while let Some(local_context) = work_queue_local.pop() {
+            if self.reachable_local_contexts.len() > max_context_count {
+                // Give up, it has taken too long.
+                return;
+            }
+
             let action =
                 match program.action(local_context.get_center(self.radius), local_context.state) {
                     Ok(action) => action,
@@ -274,10 +254,20 @@ impl PartialReachable {
         }
     }
 
-    fn confirm_closed_under_program(&mut self, program: &Program) -> Result<LoopsForever, MayHalt> {
-        self.add_to_saturate_quick(program);
+    fn confirm_closed_under_program(
+        &mut self,
+        program: &Program,
+        max_context_count: usize,
+    ) -> Result<LoopsForever, MayHalt> {
+        self.add_to_saturate_quick(program, max_context_count);
 
         if self.check_if_closed_under_program_step(program) {
+            println!(
+                "{} ; left {} ; right {}",
+                self.reachable_local_contexts.len(),
+                self.reachable_ngrams[Dir::Left].len(),
+                self.reachable_ngrams[Dir::Right].len(),
+            );
             Ok(LoopsForever)
         } else {
             Err(MayHalt)
@@ -315,9 +305,13 @@ impl LocalContext {
     }
 }
 
-pub fn classify(program: &Program, radius: u8) -> Result<LoopsForever, MayHalt> {
+pub fn classify(
+    program: &Program,
+    radius: u8,
+    max_context_count: usize,
+) -> Result<LoopsForever, MayHalt> {
     let mut reachable = PartialReachable::new(radius);
     assert!(radius >= 1);
     assert!(radius <= 31);
-    reachable.confirm_closed_under_program(program)
+    reachable.confirm_closed_under_program(program, max_context_count)
 }
