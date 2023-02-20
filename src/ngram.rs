@@ -262,12 +262,6 @@ impl PartialReachable {
         self.add_to_saturate_quick(program, max_context_count);
 
         if self.check_if_closed_under_program_step(program) {
-            println!(
-                "{} ; left {} ; right {}",
-                self.reachable_local_contexts.len(),
-                self.reachable_ngrams[Dir::Left].len(),
-                self.reachable_ngrams[Dir::Right].len(),
-            );
             Ok(LoopsForever)
         } else {
             Err(MayHalt)
